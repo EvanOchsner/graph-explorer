@@ -14,6 +14,7 @@ const GraphVisualization = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [highlightedType, setHighlightedType] = useState(null);
+  const [directedEdges, setDirectedEdges] = useState(true);
   
   const svgRef = useRef();
   const tooltipRef = useRef();
@@ -164,12 +165,13 @@ const GraphVisualization = () => {
             // Clear the column selections to test default behavior
             // or set them explicitly based on the file
             if (sampleFile === 'alternate-order.csv') {
-              // For alternate-order.csv, don't set columns to test default behavior
+              // For alternate-order.csv, use default order: source, edge type, target (Person1, ConnectionType, Person2)
               setSourceColumn('');
               setTargetColumn('');
               setEdgeTypeColumn('');
             } else {
               // Auto-select columns for standard sample data
+              // Note: default order in CSV is source, target, edge type but we map them explicitly here
               setSourceColumn('Source');
               setTargetColumn('Target');
               setEdgeTypeColumn('RelationshipType');
@@ -212,6 +214,7 @@ const GraphVisualization = () => {
       }
       
       // Get column names either from selection or default (first 3 columns)
+      // Default order changed to: source, edge type, target
       const colNames = Object.keys(data[0] || {});
       const srcCol = sourceColumn || colNames[0];
       const edgeCol = edgeTypeColumn || colNames[1];
@@ -311,15 +314,38 @@ const GraphVisualization = () => {
     // Create a main group for all elements
     const g = svg.append("g");
     
-    // Create links
+    // Create links (using path for directed edges)
     const link = g.append("g")
       .attr("stroke-opacity", 0.6)
-      .selectAll("line")
+      .selectAll("path")
       .data(graphData.links)
-      .join("line")
+      .join("path")
       .attr("stroke", d => relationshipColors[d.type] || "#999")
       .attr("stroke-width", 2)
-      .attr("class", d => `link-${d.type}`);
+      .attr("fill", "none")
+      .attr("class", d => `link-${d.type}`)
+      .attr("marker-end", directedEdges ? d => `url(#arrow-${d.type.replace(/[^a-zA-Z0-9]/g, '-')})` : null);
+    
+    // Add arrow markers for directed edges
+    if (directedEdges) {
+      // Create a marker for each relationship type
+      const defs = svg.append("defs");
+      
+      Object.entries(relationshipColors).forEach(([type, color]) => {
+        const id = `arrow-${type.replace(/[^a-zA-Z0-9]/g, '-')}`;
+        defs.append("marker")
+          .attr("id", id)
+          .attr("viewBox", "0 -5 10 10")
+          .attr("refX", 26)  // Offset so arrow doesn't overlap with the node
+          .attr("refY", 0)
+          .attr("markerWidth", 6)
+          .attr("markerHeight", 6)
+          .attr("orient", "auto")
+          .append("path")
+          .attr("d", "M0,-5L10,0L0,5")
+          .attr("fill", color);
+      });
+    }
       
     // Create nodes
     const node = g.append("g")
@@ -359,7 +385,7 @@ const GraphVisualization = () => {
         .style("opacity", 1)
         .style("left", (event.pageX + 10) + "px")
         .style("top", (event.pageY - 10) + "px")
-        .html(`<strong>${d.source.id} → ${d.target.id}</strong><br>${d.type.replace("_", " ")}`);
+        .html(`<strong>${d.source.id} ${directedEdges ? '→' : '—'} ${d.target.id}</strong><br>${d.type.replace("_", " ")}`);
     })
     .on("mouseout", function() {
       d3.select(this)
@@ -513,11 +539,26 @@ const GraphVisualization = () => {
         d.y = Math.max(20, Math.min(height - 20, d.y));
       });
       
-      link
-        .attr("x1", d => d.source.x)
-        .attr("y1", d => d.source.y)
-        .attr("x2", d => d.target.x)
-        .attr("y2", d => d.target.y);
+      // Update link paths
+      link.attr("d", d => {
+        // For directed edges, use a curved path
+        if (directedEdges) {
+          const dx = d.target.x - d.source.x;
+          const dy = d.target.y - d.source.y;
+          const dr = Math.sqrt(dx * dx + dy * dy);
+          
+          // Straight line if source and target are the same node
+          if (dr === 0) {
+            return `M${d.source.x},${d.source.y} A1,1 0 0,1 ${d.target.x},${d.target.y}`;
+          }
+          
+          // Return a curved path, with a slight arc
+          return `M${d.source.x},${d.source.y} A${dr},${dr} 0 0,1 ${d.target.x},${d.target.y}`;
+        } else {
+          // Simple straight line for undirected
+          return `M${d.source.x},${d.source.y} L${d.target.x},${d.target.y}`;
+        }
+      });
       
       node.attr("transform", d => `translate(${d.x},${d.y})`);
     });
@@ -594,7 +635,7 @@ const GraphVisualization = () => {
     return () => {
       simulation.stop();
     };
-  }, [graphData, highlightedType]);
+  }, [graphData, highlightedType, directedEdges]);
   
   return (
     <div className="graph-visualization-container">
@@ -690,6 +731,21 @@ const GraphVisualization = () => {
             <div className="column-info">
               <p>Your file has {columns.length} columns: {columns.join(', ')}</p>
               <p>Any columns not selected above will be ignored.</p>
+            </div>
+            
+            <div className="edge-direction-toggle">
+              <label htmlFor="directed-toggle">
+                <input
+                  id="directed-toggle"
+                  type="checkbox"
+                  checked={directedEdges}
+                  onChange={() => setDirectedEdges(!directedEdges)}
+                />
+                Show directed edges
+              </label>
+              <div className="field-description">
+                When checked, edges will display direction arrows
+              </div>
             </div>
           </div>
         )}

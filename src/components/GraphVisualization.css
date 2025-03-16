@@ -144,6 +144,26 @@
   margin: 0.25rem 0;
 }
 
+.edge-direction-toggle {
+  margin: 1.25rem 0;
+  padding: 0.75rem;
+  background-color: #f0f9ff;
+  border-radius: 4px;
+  border: 1px solid #bae6fd;
+}
+
+.edge-direction-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.edge-direction-toggle input[type="checkbox"] {
+  margin: 0;
+}
+
 .graph-container {
   background: white;
   border-radius: 8px;
