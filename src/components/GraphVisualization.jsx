@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 import Papa from 'papaparse';
+import parquet from 'parquetjs';
 import './GraphVisualization.css';
 
 const GraphVisualization = () => {
@@ -28,41 +29,95 @@ const GraphVisualization = () => {
     setError(null);
     
     try {
-      // In a real implementation, you'd use Parquet libraries here
-      // For demo purposes, we'll support CSV as a stand-in
-      const reader = new FileReader();
+      const fileType = uploadedFile.name.toLowerCase().endsWith('.parquet') ? 'parquet' : 'csv';
       
-      reader.onload = (e) => {
-        try {
-          Papa.parse(e.target.result, {
-            header: true,
-            dynamicTyping: true,
-            skipEmptyLines: true,
-            complete: (results) => {
-              if (results.data && results.data.length > 0) {
-                setData(results.data);
-                setColumns(results.meta.fields || []);
-                setLoading(false);
-              } else {
-                throw new Error("No data found in file");
+      if (fileType === 'csv') {
+        // Handle CSV files
+        const reader = new FileReader();
+        
+        reader.onload = (e) => {
+          try {
+            Papa.parse(e.target.result, {
+              header: true,
+              dynamicTyping: true,
+              skipEmptyLines: true,
+              complete: (results) => {
+                if (results.data && results.data.length > 0) {
+                  setData(results.data);
+                  setColumns(results.meta.fields || []);
+                  setLoading(false);
+                } else {
+                  throw new Error("No data found in file");
+                }
+              },
+              error: (error) => {
+                throw new Error(`Parsing error: ${error}`);
               }
-            },
-            error: (error) => {
-              throw new Error(`Parsing error: ${error}`);
-            }
-          });
-        } catch (err) {
-          setError(`Failed to parse file: ${err.message}`);
+            });
+          } catch (err) {
+            setError(`Failed to parse CSV file: ${err.message}`);
+            setLoading(false);
+          }
+        };
+        
+        reader.onerror = () => {
+          setError("Failed to read file");
           setLoading(false);
-        }
-      };
-      
-      reader.onerror = () => {
-        setError("Failed to read file");
-        setLoading(false);
-      };
-      
-      reader.readAsText(uploadedFile);
+        };
+        
+        reader.readAsText(uploadedFile);
+      } else {
+        // Handle Parquet files
+        const reader = new FileReader();
+        
+        reader.onload = async (e) => {
+          try {
+            // Use ArrayBuffer for Parquet files
+            const buffer = e.target.result;
+            
+            // Create a reader instance
+            const reader = await parquet.ParquetReader.openBuffer(Buffer.from(buffer));
+            
+            // Get the file schema to extract column names
+            const schema = reader.getSchema();
+            const fields = Object.keys(schema.fields);
+            setColumns(fields);
+            
+            // Read all records
+            const cursor = reader.getCursor();
+            const rowCount = reader.getRowCount();
+            const recordData = [];
+            
+            // Read records in batches
+            for (let i = 0; i < rowCount; i++) {
+              const record = await cursor.next();
+              if (record) {
+                recordData.push(record);
+              }
+            }
+            
+            if (recordData.length > 0) {
+              setData(recordData);
+              setLoading(false);
+            } else {
+              throw new Error("No data found in Parquet file");
+            }
+            
+            // Close the reader
+            reader.close();
+          } catch (err) {
+            setError(`Failed to parse Parquet file: ${err.message}`);
+            setLoading(false);
+          }
+        };
+        
+        reader.onerror = () => {
+          setError("Failed to read file");
+          setLoading(false);
+        };
+        
+        reader.readAsArrayBuffer(uploadedFile);
+      }
     } catch (err) {
       setError(`Error processing file: ${err.message}`);
       setLoading(false);
@@ -114,10 +169,16 @@ const GraphVisualization = () => {
       
       // Process each row
       data.forEach(row => {
-        const source = String(row[sourceColumn]);
-        const target = String(row[targetColumn]);
-        const edgeType = edgeTypeColumn ? String(row[edgeTypeColumn]) : 'default';
+        // Get values from the specified columns, handling null/undefined gracefully
+        const source = row[sourceColumn] ? String(row[sourceColumn]) : "";
+        const target = row[targetColumn] ? String(row[targetColumn]) : "";
         
+        // Get edge type, using default if not specified
+        const edgeType = edgeTypeColumn && row[edgeTypeColumn] 
+          ? String(row[edgeTypeColumn]) 
+          : 'default';
+        
+        // Skip rows with missing source or target
         if (!source || !target) return;
         
         // Add source node if not exists
@@ -500,6 +561,9 @@ const GraphVisualization = () => {
             onChange={handleFileUpload}
             className="file-input"
           />
+          <div className="file-format-info">
+            Supported formats: CSV, Parquet
+          </div>
         </div>
         
         <button onClick={loadSampleData} className="sample-data-btn">
@@ -512,13 +576,18 @@ const GraphVisualization = () => {
         {columns.length > 0 && (
           <div className="column-selection">
             <h3>Column Mapping</h3>
+            <p className="mapping-instruction">
+              Select which columns contain graph relationship data:
+            </p>
+            
             <div className="select-group">
-              <label htmlFor="source-column">Source Column:</label>
+              <label htmlFor="source-column">Source Node Column: <span className="required">*</span></label>
               <select
                 id="source-column"
                 value={sourceColumn}
                 onChange={(e) => setSourceColumn(e.target.value)}
                 className="column-select"
+                required
               >
                 <option value="">Select Source Column</option>
                 {columns.map(col => (
@@ -528,12 +597,13 @@ const GraphVisualization = () => {
             </div>
             
             <div className="select-group">
-              <label htmlFor="target-column">Target Column:</label>
+              <label htmlFor="target-column">Target Node Column: <span className="required">*</span></label>
               <select
                 id="target-column"
                 value={targetColumn}
                 onChange={(e) => setTargetColumn(e.target.value)}
                 className="column-select"
+                required
               >
                 <option value="">Select Target Column</option>
                 {columns.map(col => (
@@ -543,18 +613,26 @@ const GraphVisualization = () => {
             </div>
             
             <div className="select-group">
-              <label htmlFor="edge-type-column">Relationship Type Column (Optional):</label>
+              <label htmlFor="edge-type-column">Edge Type Column:</label>
               <select
                 id="edge-type-column"
                 value={edgeTypeColumn}
                 onChange={(e) => setEdgeTypeColumn(e.target.value)}
                 className="column-select"
               >
-                <option value="">None</option>
+                <option value="">None (use default edge type)</option>
                 {columns.map(col => (
                   <option key={`edge-${col}`} value={col}>{col}</option>
                 ))}
               </select>
+              <div className="field-description">
+                Specifies the relationship type between nodes
+              </div>
+            </div>
+            
+            <div className="column-info">
+              <p>Your file has {columns.length} columns: {columns.join(', ')}</p>
+              <p>Any columns not selected above will be ignored.</p>
             </div>
           </div>
         )}
