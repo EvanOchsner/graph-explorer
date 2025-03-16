@@ -76,10 +76,10 @@ const GraphVisualization = () => {
   };
   
   // Load sample dataset
-  const loadSampleData = async () => {
+  const loadSampleData = async (sampleFile = 'classmates.csv') => {
     setLoading(true);
     try {
-      const response = await fetch('/src/data/classmates.csv');
+      const response = await fetch(`/src/data/${sampleFile}`);
       const csvText = await response.text();
       
       Papa.parse(csvText, {
@@ -90,10 +90,21 @@ const GraphVisualization = () => {
           if (results.data && results.data.length > 0) {
             setData(results.data);
             setColumns(results.meta.fields || []);
-            // Auto-select columns for sample data
-            setSourceColumn('Source');
-            setTargetColumn('Target');
-            setEdgeTypeColumn('RelationshipType');
+            
+            // Clear the column selections to test default behavior
+            // or set them explicitly based on the file
+            if (sampleFile === 'alternate-order.csv') {
+              // For alternate-order.csv, don't set columns to test default behavior
+              setSourceColumn('');
+              setTargetColumn('');
+              setEdgeTypeColumn('');
+            } else {
+              // Auto-select columns for standard sample data
+              setSourceColumn('Source');
+              setTargetColumn('Target');
+              setEdgeTypeColumn('RelationshipType');
+            }
+            
             setLoading(false);
           } else {
             throw new Error("No data found in sample file");
@@ -109,25 +120,41 @@ const GraphVisualization = () => {
     }
   };
   
-  // Process data into graph format when columns are selected
+  // Process data into graph format when columns are selected or using default behavior
   useEffect(() => {
-    if (!data || !sourceColumn || !targetColumn) return;
+    if (!data) return;
     
     try {
       // Create nodes and links from the data
       const nodeMap = new Map();
       const links = [];
       
+      // Check if we're using default column behavior (first 3 columns)
+      const useDefaultColumns = !sourceColumn && !targetColumn;
+      
+      // If using default columns, verify the data has at least 3 columns
+      if (useDefaultColumns) {
+        const firstRow = data[0];
+        if (!firstRow || Object.keys(firstRow).length < 3) {
+          setError("Data must have at least 3 columns for default behavior (source, edge type, destination)");
+          return;
+        }
+      }
+      
+      // Get column names either from selection or default (first 3 columns)
+      const colNames = Object.keys(data[0] || {});
+      const srcCol = sourceColumn || colNames[0];
+      const edgeCol = edgeTypeColumn || colNames[1];
+      const tgtCol = targetColumn || colNames[2];
+      
       // Process each row
       data.forEach(row => {
         // Get values from the specified columns, handling null/undefined gracefully
-        const source = row[sourceColumn] ? String(row[sourceColumn]) : "";
-        const target = row[targetColumn] ? String(row[targetColumn]) : "";
+        const source = row[srcCol] ? String(row[srcCol]) : "";
+        const target = row[tgtCol] ? String(row[tgtCol]) : "";
         
         // Get edge type, using default if not specified
-        const edgeType = edgeTypeColumn && row[edgeTypeColumn] 
-          ? String(row[edgeTypeColumn]) 
-          : 'default';
+        const edgeType = row[edgeCol] ? String(row[edgeCol]) : 'default';
         
         // Skip rows with missing source or target
         if (!source || !target) return;
@@ -517,9 +544,18 @@ const GraphVisualization = () => {
           </div>
         </div>
         
-        <button onClick={loadSampleData} className="sample-data-btn">
-          Load Sample Data
-        </button>
+        <div className="sample-data-options">
+          <button onClick={() => loadSampleData('classmates.csv')} className="sample-data-btn">
+            Load Sample Data
+          </button>
+          <button 
+            onClick={() => loadSampleData('alternate-order.csv')} 
+            className="sample-data-btn alternate"
+            title="Load data with different column names to test default behavior"
+          >
+            Load Alternate Sample
+          </button>
+        </div>
         
         {loading && <div className="loading">Loading data...</div>}
         {error && <div className="error">{error}</div>}

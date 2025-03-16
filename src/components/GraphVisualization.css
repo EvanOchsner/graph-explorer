@@ -48,6 +48,12 @@
   color: #666;
 }
 
+.sample-data-options {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
 .sample-data-btn {
   background-color: #4c51bf;
   color: white;
@@ -61,6 +67,14 @@
 
 .sample-data-btn:hover {
   background-color: #434190;
+}
+
+.sample-data-btn.alternate {
+  background-color: #38a169;
+}
+
+.sample-data-btn.alternate:hover {
+  background-color: #2f855a;
 }
 
 .loading {
