@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 import Papa from 'papaparse';
-import parquet from 'parquetjs';
 import './GraphVisualization.css';
 
 const GraphVisualization = () => {
@@ -29,95 +28,47 @@ const GraphVisualization = () => {
     setError(null);
     
     try {
-      const fileType = uploadedFile.name.toLowerCase().endsWith('.parquet') ? 'parquet' : 'csv';
-      
-      if (fileType === 'csv') {
-        // Handle CSV files
-        const reader = new FileReader();
-        
-        reader.onload = (e) => {
-          try {
-            Papa.parse(e.target.result, {
-              header: true,
-              dynamicTyping: true,
-              skipEmptyLines: true,
-              complete: (results) => {
-                if (results.data && results.data.length > 0) {
-                  setData(results.data);
-                  setColumns(results.meta.fields || []);
-                  setLoading(false);
-                } else {
-                  throw new Error("No data found in file");
-                }
-              },
-              error: (error) => {
-                throw new Error(`Parsing error: ${error}`);
-              }
-            });
-          } catch (err) {
-            setError(`Failed to parse CSV file: ${err.message}`);
-            setLoading(false);
-          }
-        };
-        
-        reader.onerror = () => {
-          setError("Failed to read file");
-          setLoading(false);
-        };
-        
-        reader.readAsText(uploadedFile);
-      } else {
-        // Handle Parquet files
-        const reader = new FileReader();
-        
-        reader.onload = async (e) => {
-          try {
-            // Use ArrayBuffer for Parquet files
-            const buffer = e.target.result;
-            
-            // Create a reader instance
-            const reader = await parquet.ParquetReader.openBuffer(Buffer.from(buffer));
-            
-            // Get the file schema to extract column names
-            const schema = reader.getSchema();
-            const fields = Object.keys(schema.fields);
-            setColumns(fields);
-            
-            // Read all records
-            const cursor = reader.getCursor();
-            const rowCount = reader.getRowCount();
-            const recordData = [];
-            
-            // Read records in batches
-            for (let i = 0; i < rowCount; i++) {
-              const record = await cursor.next();
-              if (record) {
-                recordData.push(record);
-              }
-            }
-            
-            if (recordData.length > 0) {
-              setData(recordData);
-              setLoading(false);
-            } else {
-              throw new Error("No data found in Parquet file");
-            }
-            
-            // Close the reader
-            reader.close();
-          } catch (err) {
-            setError(`Failed to parse Parquet file: ${err.message}`);
-            setLoading(false);
-          }
-        };
-        
-        reader.onerror = () => {
-          setError("Failed to read file");
-          setLoading(false);
-        };
-        
-        reader.readAsArrayBuffer(uploadedFile);
+      // Currently, we only fully support CSV files in the browser
+      if (!uploadedFile.name.toLowerCase().endsWith('.csv')) {
+        setError("Currently only CSV files are supported. Please convert your data to CSV format.");
+        setLoading(false);
+        return;
       }
+      
+      // Handle CSV files
+      const reader = new FileReader();
+      
+      reader.onload = (e) => {
+        try {
+          Papa.parse(e.target.result, {
+            header: true,
+            dynamicTyping: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+              if (results.data && results.data.length > 0) {
+                setData(results.data);
+                setColumns(results.meta.fields || []);
+                setLoading(false);
+              } else {
+                throw new Error("No data found in file");
+              }
+            },
+            error: (error) => {
+              throw new Error(`Parsing error: ${error}`);
+            }
+          });
+        } catch (err) {
+          setError(`Failed to parse CSV file: ${err.message}`);
+          setLoading(false);
+        }
+      };
+      
+      reader.onerror = () => {
+        setError("Failed to read file");
+        setLoading(false);
+      };
+      
+      reader.readAsText(uploadedFile);
     } catch (err) {
       setError(`Error processing file: ${err.message}`);
       setLoading(false);
@@ -557,12 +508,12 @@ const GraphVisualization = () => {
           <input
             id="file-upload"
             type="file"
-            accept=".parquet,.csv"
+            accept=".csv"
             onChange={handleFileUpload}
             className="file-input"
           />
           <div className="file-format-info">
-            Supported formats: CSV, Parquet
+            Supported formats: CSV
           </div>
         </div>
         
