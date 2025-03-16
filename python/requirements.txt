@@ -1,0 +1,6 @@
+pandas>=1.0.0
+numpy>=1.18.0
+pyarrow>=5.0.0  # For Parquet support
+jupyter>=1.0.0  # For notebook support
+ipython>=7.0.0  # For display functionality
+matplotlib>=3.3.0  # Optional, for visualizations in notebooks

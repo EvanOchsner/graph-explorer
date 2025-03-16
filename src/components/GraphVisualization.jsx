@@ -75,6 +75,76 @@ const GraphVisualization = () => {
     }
   };
   
+  // Load data from a JSON API payload
+  const loadFromJsonPayload = (jsonData) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Handle different data formats
+      let parsedData = jsonData;
+      
+      // If it's a string, try to parse it as JSON
+      if (typeof jsonData === 'string') {
+        try {
+          parsedData = JSON.parse(jsonData);
+        } catch (err) {
+          throw new Error("Invalid JSON string data");
+        }
+      }
+      
+      // Check if we have an array of objects
+      if (!Array.isArray(parsedData)) {
+        throw new Error("Data must be an array of objects");
+      }
+      
+      if (parsedData.length === 0) {
+        throw new Error("No data found in JSON payload");
+      }
+      
+      // Extract column names from the first object
+      const firstRow = parsedData[0];
+      const extractedColumns = Object.keys(firstRow);
+      
+      if (extractedColumns.length < 3) {
+        throw new Error("Data must have at least 3 columns for graph visualization");
+      }
+      
+      setData(parsedData);
+      setColumns(extractedColumns);
+      setLoading(false);
+    } catch (err) {
+      setError(`Error processing JSON data: ${err.message}`);
+      setLoading(false);
+    }
+  };
+  
+  // This function will be exposed to the window object for external access
+  React.useEffect(() => {
+    // Expose the data loading function to the window object so external scripts can use it
+    window.loadGraphData = (jsonData) => {
+      loadFromJsonPayload(jsonData);
+    };
+    
+    // Check for URL parameters with data
+    const urlParams = new URLSearchParams(window.location.search);
+    const dataParam = urlParams.get('data');
+    if (dataParam) {
+      try {
+        // If we have a data parameter, try to decode and load it
+        const decodedData = JSON.parse(decodeURIComponent(dataParam));
+        loadFromJsonPayload(decodedData);
+      } catch (err) {
+        console.error("Failed to load data from URL parameter", err);
+      }
+    }
+    
+    // Cleanup function to remove the global function when component unmounts
+    return () => {
+      delete window.loadGraphData;
+    };
+  }, []);
+  
   // Load sample dataset
   const loadSampleData = async (sampleFile = 'classmates.csv') => {
     setLoading(true);
